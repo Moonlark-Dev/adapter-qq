@@ -149,11 +149,11 @@ class Adapter(BaseAdapter):
         bot = Bot(self, bot_info.id, bot_info)
 
         # get sharded gateway url
-        if self.qq_config.qq_custom_gateway_url:
-            ws_url = URL(str(self.qq_config.qq_custom_gateway_url))
         try:
             gateway_info = await bot.shard_url_get()
             ws_url = URL(gateway_info.url)
+            if self.qq_config.qq_custom_gateway_url:
+                ws_url = URL(str(self.qq_config.qq_custom_gateway_url))
         except Exception as e:
             log(
                 "ERROR",
