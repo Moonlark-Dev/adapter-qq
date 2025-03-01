@@ -150,7 +150,7 @@ class Adapter(BaseAdapter):
 
         # get sharded gateway url
         if self.qq_config.qq_custom_gateway_url:
-            ws_url = URL(str(self.qq_config.qq_custom_gateway_url))
+            ws_url = URL(self.qq_config.qq_custom_gateway_url)
         try:
             gateway_info = await bot.shard_url_get()
             ws_url = URL(gateway_info.url)
