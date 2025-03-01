@@ -60,3 +60,5 @@ class Config(BaseModel):
     qq_auth_base: HttpUrl = Field("https://bots.qq.com/app/getAppAccessToken")  # type: ignore
     qq_verify_webhook: bool = True
     qq_bots: list[BotInfo] = Field(default_factory=list)
+
+    qq_custom_gateway_url: Optional[HttpUrl] = None
