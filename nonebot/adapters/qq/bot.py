@@ -15,18 +15,19 @@ from typing import (
 )
 from typing_extensions import Never, override
 
-from pydantic import BaseModel
-
-from nonebot.adapters import Bot as BaseBot
 from nonebot.compat import type_validate_python
 from nonebot.drivers import Request, Response
 from nonebot.message import handle_event
+from pydantic import BaseModel
+
+from nonebot.adapters import Bot as BaseBot
 
 from .config import BotInfo
 from .event import (
     C2CMessageCreateEvent,
     DirectMessageCreateEvent,
     Event,
+    GroupAddRobotEvent,
     GroupAtMessageCreateEvent,
     GuildMessageEvent,
     InteractionCreateEvent,
@@ -556,6 +557,12 @@ class Bot(BaseBot):
                 return await self.send_to_dms(
                     guild_id=gid, event_id=event.event_id, message=message
                 )
+        elif isinstance(event, GroupAddRobotEvent):
+            return await self.send_to_group(
+                group_openid=event.group_openid,
+                message=message,
+                event_id=event.event_id,
+            )
 
         raise RuntimeError("Event cannot be replied to!")
 
@@ -695,7 +702,7 @@ class Bot(BaseBot):
         private_user_ids: Optional[list[str]] = None,
         speak_permission: Optional[Union[SpeakPermission, int]] = None,
         application_id: Optional[str] = None,
-    ) -> list[Channel]:
+    ) -> Channel:
         request = Request(
             "POST",
             self.adapter.get_api_base().joinpath("guilds", guild_id, "channels"),
@@ -713,7 +720,7 @@ class Bot(BaseBot):
                 }
             ),
         )
-        return type_validate_python(list[Channel], await self._request(request))
+        return type_validate_python(Channel, await self._request(request))
 
     @API
     async def patch_channel(

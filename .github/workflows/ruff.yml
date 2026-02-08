@@ -9,14 +9,14 @@ on:
       - "nonebot/**"
       - "packages/**"
       - "pyproject.toml"
-      - "poetry.lock"
+      - "uv.lock"
 
 jobs:
   ruff:
     name: Ruff Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run Ruff Lint
-        uses: chartboost/ruff-action@v1
+        uses: astral-sh/ruff-action@v3
