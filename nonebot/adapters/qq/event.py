@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Optional, TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 from typing_extensions import override
 
 from nonebot.utils import escape_tag
@@ -23,6 +23,7 @@ from .models import (
     MessageReaction,
     Post,
     QQMessage,
+    QQReplyMessage,
     Reply,
     RichText,
     Thread,
@@ -80,6 +81,9 @@ class EventType(str, Enum):
     C2C_MESSAGE_CREATE = "C2C_MESSAGE_CREATE"
     GROUP_AT_MESSAGE_CREATE = "GROUP_AT_MESSAGE_CREATE"
 
+    # C2C_GROUP_MESSAGE
+    GROUP_MESSAGE_CREATE = "GROUP_MESSAGE_CREATE"
+
     # INTERACTION
     INTERACTION_CREATE = "INTERACTION_CREATE"
 
@@ -124,7 +128,7 @@ class Event(BaseEvent):
     __type__: EventType
 
     # event id from payload id
-    event_id: Optional[str] = None
+    event_id: str | None = None
 
     @override
     def get_event_name(self) -> str:
@@ -267,6 +271,10 @@ class GuildMemberRemoveEvent(GuildMemberEvent):
 class MessageEvent(Event):
     to_me: bool = False
 
+    if TYPE_CHECKING:
+        message: Message
+        original_message: Message
+
     @override
     def get_type(self) -> str:
         return "message"
@@ -277,7 +285,7 @@ class MessageEvent(Event):
 
 
 class GuildMessageEvent(MessageEvent, GuildMessage):
-    reply: Optional[GuildMessage] = None
+    reply: GuildMessage | None = None
     """
     :说明: 消息中提取的回复消息，内容为 ``get_message_of_id`` API 返回结果
 
@@ -303,9 +311,9 @@ class GuildMessageEvent(MessageEvent, GuildMessage):
 
     @override
     def get_message(self) -> Message:
-        if not hasattr(self, "_message"):
-            setattr(self, "_message", Message.from_guild_message(self))
-        return getattr(self, "_message")
+        if not hasattr(self, "message"):
+            self.message = Message.from_guild_message(self)
+        return self.message
 
 
 @register_event_class
@@ -357,13 +365,18 @@ class DirectMessageDeleteEvent(MessageDeleteEvent):
 
 
 class QQMessageEvent(MessageEvent, QQMessage):
+    reply: QQReplyMessage | None = None
     _reply_seq: int = 0
 
     @override
     def get_message(self) -> Message:
-        if not hasattr(self, "_message"):
-            setattr(self, "_message", Message.from_qq_message(self))
-        return getattr(self, "_message")
+        if not hasattr(self, "message"):
+            self.message = Message.from_qq_message(self)
+        return self.message
+
+    def get_reply_message(self) -> Message | None:
+        if self.reply:
+            return Message.from_qq_message(self.reply)
 
 
 @register_event_class
@@ -389,12 +402,12 @@ class C2CMessageCreateEvent(QQMessageEvent):
 
 
 @register_event_class
-class GroupAtMessageCreateEvent(QQMessageEvent):
-    __type__ = EventType.GROUP_AT_MESSAGE_CREATE
+class GroupMessageCreateEvent(QQMessageEvent):
+    __type__ = EventType.GROUP_MESSAGE_CREATE
 
     author: GroupMemberAuthor
+    group_id: str
     group_openid: str
-    to_me: bool = True
 
     @override
     def get_message(self) -> Message:
@@ -402,9 +415,9 @@ class GroupAtMessageCreateEvent(QQMessageEvent):
         msg = Message.from_qq_message(self)
         if msg and msg[0].type == "text":
             msg[0].data["text"] = msg[0].data["text"].lstrip()
-        if not hasattr(self, "_message"):
-            setattr(self, "_message", msg)
-        return getattr(self, "_message")
+        if not hasattr(self, "message"):
+            self.message = msg
+        return self.message
 
     @override
     def get_user_id(self) -> str:
@@ -421,6 +434,13 @@ class GroupAtMessageCreateEvent(QQMessageEvent):
             f"{self.author.member_openid}@[Group:{self.group_openid}]: "
             f"{self.get_message()!r}"
         )
+
+
+@register_event_class
+class GroupAtMessageCreateEvent(GroupMessageCreateEvent):
+    __type__ = EventType.GROUP_AT_MESSAGE_CREATE
+
+    to_me: bool = True
 
 
 @register_event_class
@@ -721,6 +741,7 @@ __all__ = [
     "GroupAddRobotEvent",
     "GroupAtMessageCreateEvent",
     "GroupDelRobotEvent",
+    "GroupMessageCreateEvent",
     "GroupMsgReceiveEvent",
     "GroupMsgRejectEvent",
     "GroupRobotEvent",

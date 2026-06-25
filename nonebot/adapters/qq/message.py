@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 import re
-from typing import TYPE_CHECKING, Literal, Optional, TypedDict, Union, overload
-from typing_extensions import Self, override
+from typing import TYPE_CHECKING, Literal, TypedDict, Union, overload
+from typing_extensions import NotRequired, Self, override
 
 from nonebot.compat import type_validate_python
 
@@ -12,8 +12,8 @@ from nonebot.adapters import Message as BaseMessage
 from nonebot.adapters import MessageSegment as BaseMessageSegment
 
 from .models import Attachment as QQAttachment
-from .models import Message as GuildMessage
 from .models import (
+    GroupMentionUser,
     MessageActionButton,
     MessageArk,
     MessageEmbed,
@@ -23,7 +23,9 @@ from .models import (
     MessageReference,
     MessageStream,
     QQMessage,
+    QQReplyMessage,
 )
+from .models import Message as GuildMessage
 from .utils import escape, unescape
 
 
@@ -42,8 +44,11 @@ class MessageSegment(BaseMessageSegment["Message"]):
         return Emoji("emoji", data={"id": id})
 
     @staticmethod
-    def mention_user(user_id: str) -> "MentionUser":
-        return MentionUser("mention_user", {"user_id": str(user_id)})
+    def mention_user(user_id: str, username: str | None = None) -> "MentionUser":
+        data: "_MentionUserData" = {"user_id": str(user_id)}
+        if username:
+            data["username"] = username
+        return MentionUser("mention_user", data)
 
     @staticmethod
     def mention_channel(channel_id: str) -> "MentionChannel":
@@ -58,48 +63,76 @@ class MessageSegment(BaseMessageSegment["Message"]):
         return Attachment("image", data={"url": url})
 
     @staticmethod
-    def file_image(data: Union[bytes, BytesIO, Path]) -> "LocalAttachment":
+    def file_image(
+        data: bytes | BytesIO | Path, file_name: str | None = None
+    ) -> "LocalAttachment":
         if isinstance(data, BytesIO):
             data = data.getvalue()
         elif isinstance(data, Path):
+            if file_name is None:
+                file_name = data.name
             data = data.read_bytes()
-        return LocalAttachment("file_image", data={"content": data})
+        return LocalAttachment(
+            "file_image",
+            data={"content": data, "file_name": file_name},
+        )
 
     @staticmethod
     def audio(url: str) -> "Attachment":
         return Attachment("audio", data={"url": url})
 
     @staticmethod
-    def file_audio(data: Union[bytes, BytesIO, Path]) -> "LocalAttachment":
+    def file_audio(
+        data: bytes | BytesIO | Path, file_name: str | None = None
+    ) -> "LocalAttachment":
         if isinstance(data, BytesIO):
             data = data.getvalue()
         elif isinstance(data, Path):
+            if file_name is None:
+                file_name = data.name
             data = data.read_bytes()
-        return LocalAttachment("file_audio", data={"content": data})
+        return LocalAttachment(
+            "file_audio",
+            data={"content": data, "file_name": file_name},
+        )
 
     @staticmethod
     def video(url: str) -> "Attachment":
         return Attachment("video", data={"url": url})
 
     @staticmethod
-    def file_video(data: Union[bytes, BytesIO, Path]) -> "LocalAttachment":
+    def file_video(
+        data: bytes | BytesIO | Path, file_name: str | None = None
+    ) -> "LocalAttachment":
         if isinstance(data, BytesIO):
             data = data.getvalue()
         elif isinstance(data, Path):
+            if file_name is None:
+                file_name = data.name
             data = data.read_bytes()
-        return LocalAttachment("file_video", data={"content": data})
+        return LocalAttachment(
+            "file_video",
+            data={"content": data, "file_name": file_name},
+        )
 
     @staticmethod
     def file(url: str) -> "Attachment":
         return Attachment("file", data={"url": url})
 
     @staticmethod
-    def file_file(data: Union[bytes, BytesIO, Path]) -> "LocalAttachment":
+    def file_file(
+        data: bytes | BytesIO | Path, file_name: str | None = None
+    ) -> "LocalAttachment":
         if isinstance(data, BytesIO):
             data = data.getvalue()
         elif isinstance(data, Path):
+            if file_name is None:
+                file_name = data.name
             data = data.read_bytes()
-        return LocalAttachment("file_file", data={"content": data})
+        return LocalAttachment(
+            "file_file",
+            data={"content": data, "file_name": file_name},
+        )
 
     @staticmethod
     def ark(ark: MessageArk) -> "Ark":
@@ -110,7 +143,7 @@ class MessageSegment(BaseMessageSegment["Message"]):
         return Embed("embed", data={"embed": embed})
 
     @staticmethod
-    def markdown(markdown: Union[str, MessageMarkdown]) -> "Markdown":
+    def markdown(markdown: str | MessageMarkdown) -> "Markdown":
         return Markdown(
             "markdown",
             data={
@@ -132,13 +165,11 @@ class MessageSegment(BaseMessageSegment["Message"]):
 
     @overload
     @staticmethod
-    def reference(
-        reference: str, ignore_error: Optional[bool] = None
-    ) -> "Reference": ...
+    def reference(reference: str, ignore_error: bool | None = None) -> "Reference": ...
 
     @staticmethod
     def reference(
-        reference: Union[str, MessageReference], ignore_error: Optional[bool] = None
+        reference: str | MessageReference, ignore_error: bool | None = None
     ) -> "Reference":
         if isinstance(reference, MessageReference):
             return Reference("reference", data={"reference": reference})
@@ -155,9 +186,9 @@ class MessageSegment(BaseMessageSegment["Message"]):
     @staticmethod
     def stream(
         state: Literal[1, 10, 11, 20],
-        _id: Optional[str],
+        _id: str | None,
         index: int,
-        reset: Optional[bool] = None,
+        reset: bool | None = None,
     ) -> "Stream":
         _data = {
             "state": state,
@@ -258,6 +289,8 @@ class Emoji(MessageSegment):
 
 class _MentionUserData(TypedDict):
     user_id: str
+    username: NotRequired[str]
+    is_bot: NotRequired[bool]
 
 
 @dataclass
@@ -314,6 +347,7 @@ class Attachment(MessageSegment):
 
 class _LocalAttachmentData(TypedDict):
     content: bytes
+    file_name: str | None
 
 
 @dataclass
@@ -527,17 +561,13 @@ class Message(BaseMessage[MessageSegment]):
         return MessageSegment
 
     @override
-    def __add__(
-        self, other: Union[str, MessageSegment, Iterable[MessageSegment]]
-    ) -> Self:
+    def __add__(self, other: str | MessageSegment | Iterable[MessageSegment]) -> Self:
         return super().__add__(
             MessageSegment.text(other) if isinstance(other, str) else other
         )
 
     @override
-    def __radd__(
-        self, other: Union[str, MessageSegment, Iterable[MessageSegment]]
-    ) -> Self:
+    def __radd__(self, other: str | MessageSegment | Iterable[MessageSegment]) -> Self:
         return super().__radd__(
             MessageSegment.text(other) if isinstance(other, str) else other
         )
@@ -546,8 +576,10 @@ class Message(BaseMessage[MessageSegment]):
     @override
     def _construct(msg: str) -> Iterable[MessageSegment]:
         text_begin = 0
+        msg = msg.replace("@everyone", "")
+        msg = re.sub(r"\<qqbot-at-everyone\s/\>", "", msg)
         for embed in re.finditer(
-            r"\<(?P<type>(?:@|#|emoji:))!?(?P<id>\w+?)\>",
+            r"\<(?P<type>(?:@|#|emoji:))!?(?P<id>\w+?)\>|\<(?P<type1>qqbot-at-user) id=\"(?P<id1>\w+)\"\s/\>|\<faceType=(?P<faceType>\d+),faceId=\"(?P<faceId>\d+)\",ext=\"[\w\=]+\"\>",  # noqa: E501
             msg,
         ):
             content = msg[text_begin : embed.pos + embed.start()]
@@ -555,13 +587,20 @@ class Message(BaseMessage[MessageSegment]):
                 yield Text("text", {"text": unescape(content)})
             text_begin = embed.pos + embed.end()
             if embed.group("type") == "@":
-                yield MentionUser("mention_user", {"user_id": embed.group("id")})
+                if embed.group("id") == "all":
+                    yield MessageSegment.mention_everyone()
+                else:
+                    yield MentionUser("mention_user", {"user_id": embed.group("id")})
             elif embed.group("type") == "#":
                 yield MentionChannel(
                     "mention_channel", {"channel_id": embed.group("id")}
                 )
-            else:
+            elif embed.group("type") == "emoji":
                 yield Emoji("emoji", {"id": embed.group("id")})
+            elif embed.group("type1") == "qqbot-at-user":
+                yield MentionUser("mention_user", {"user_id": embed.group("id1")})
+            elif embed.group("faceType") and embed.group("faceId") != "0":
+                yield Emoji("emoji", {"id": embed["faceId"]})
         content = msg[text_begin:]
         if content:
             yield Text("text", {"text": unescape(msg[text_begin:])})
@@ -584,8 +623,15 @@ class Message(BaseMessage[MessageSegment]):
         return msg
 
     @classmethod
-    def from_qq_message(cls, message: QQMessage) -> Self:
+    def from_qq_message(cls, message: QQMessage | QQReplyMessage) -> Self:
         msg = cls()
+        # if isinstance(message, QQMessage) and message.msg_elements:
+        #     msg.append(Reference("reference", {
+        #         "reference": MessageReference(
+        #             message_id=message.msg_elements[0].msg_idx
+        #         ),
+        #         "message": message.msg_elements[0]
+        #     }))
         if message.content:
             msg.extend(Message(message.content))
         if message.attachments:
@@ -604,6 +650,45 @@ class Message(BaseMessage[MessageSegment]):
                 for seg in message.attachments
                 if seg.url
             )
+
+        if isinstance(message, QQMessage) and message.mentions:
+            mentions = {
+                m.id: m for m in message.mentions if isinstance(m, GroupMentionUser)
+            }
+        else:
+            mentions = {}
+
+        ats = msg["mention_user"]
+        if not ats:
+            for mention in mentions.values():
+                if mention.is_you:
+                    msg.insert(
+                        0,
+                        MentionUser(
+                            "mention_user",
+                            {
+                                "user_id": mention.id,
+                                "username": mention.username,
+                                "is_bot": True,
+                            },
+                        ),
+                    )
+                else:
+                    msg.append(
+                        MentionUser(
+                            "mention_user",
+                            {
+                                "user_id": mention.id,
+                                "username": mention.username,
+                                "is_bot": False,
+                            },
+                        )
+                    )
+        else:
+            for at in ats:
+                if mention := mentions.get(at.data["user_id"]):
+                    at.data["username"] = mention.username
+                    at.data["is_bot"] = mention.is_you
         return msg
 
     def extract_content(self, escape_text: bool = True) -> str:
