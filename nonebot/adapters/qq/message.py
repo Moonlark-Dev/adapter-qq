@@ -300,7 +300,7 @@ class MentionUser(MessageSegment):
 
     @override
     def __str__(self) -> str:
-        return f"<@{self.data['user_id']}>"
+        return f'<qqbot-at-user id="{self.data["user_id"]}" />'
 
 
 class _MentionChannelData(TypedDict):
@@ -328,7 +328,7 @@ class MentionEveryone(MessageSegment):
 
     @override
     def __str__(self) -> str:
-        return "@everyone"
+        return "<qqbot-at-everyone />"
 
 
 class _AttachmentData(TypedDict):
@@ -576,8 +576,9 @@ class Message(BaseMessage[MessageSegment]):
     @override
     def _construct(msg: str) -> Iterable[MessageSegment]:
         text_begin = 0
-        msg = msg.replace("@everyone", "")
-        msg = re.sub(r"\<qqbot-at-everyone\s/\>", "", msg)
+        # Normalize deprecated text mention formats to the new text chain format
+        msg = msg.replace("@everyone", "<@everyone>")
+        msg = re.sub(r"\<qqbot-at-everyone\s/\>", "<@everyone>", msg)
         for embed in re.finditer(
             r"\<(?P<type>(?:@|#|emoji:))!?(?P<id>\w+?)\>|\<(?P<type1>qqbot-at-user) id=\"(?P<id1>\w+)\"\s/\>|\<faceType=(?P<faceType>\d+),faceId=\"(?P<faceId>\d+)\",ext=\"[\w\=]+\"\>",  # noqa: E501
             msg,
@@ -587,7 +588,7 @@ class Message(BaseMessage[MessageSegment]):
                 yield Text("text", {"text": unescape(content)})
             text_begin = embed.pos + embed.end()
             if embed.group("type") == "@":
-                if embed.group("id") == "all":
+                if embed.group("id") in ("all", "everyone"):
                     yield MessageSegment.mention_everyone()
                 else:
                     yield MentionUser("mention_user", {"user_id": embed.group("id")})
