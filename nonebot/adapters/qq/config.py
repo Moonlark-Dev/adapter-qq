@@ -1,5 +1,8 @@
-from nonebot.compat import PYDANTIC_V2, ConfigDict
+from typing import Any
+
+from nonebot.compat import PYDANTIC_V2, ConfigDict, field_validator
 from pydantic import BaseModel, Field, HttpUrl
+from yarl import URL
 
 
 class Intents(BaseModel):
@@ -10,6 +13,7 @@ class Intents(BaseModel):
     direct_message: bool = False
     open_forum_event: bool = False
     audio_live_member: bool = False
+    group_members: bool = False
     c2c_group_at_messages: bool = False
     interaction: bool = False
     message_audit: bool = True
@@ -33,6 +37,7 @@ class Intents(BaseModel):
             | self.direct_message << 12
             | self.open_forum_event << 18
             | self.audio_live_member << 19
+            | self.group_members << 24
             | self.c2c_group_at_messages << 25
             | self.interaction << 26
             | self.message_audit << 27
@@ -59,4 +64,20 @@ class Config(BaseModel):
     qq_verify_webhook: bool = True
     qq_bots: list[BotInfo] = Field(default_factory=list)
 
-    qq_custom_gateway_url: Optional[str] = None
+    qq_custom_gateway_url: URL | None = None
+
+    @field_validator("qq_custom_gateway_url", mode="before")
+    @classmethod
+    def validate_gateway_url(cls, v: Any) -> URL | None:
+        if v is None:
+            return v
+        url = URL(v) if isinstance(v, str) else v
+        if not isinstance(url, URL):
+            raise TypeError("Invalid gateway url type")
+        if url.scheme not in ("ws", "wss"):
+            raise ValueError(
+                f"Gateway URL scheme must be ws:// or wss://, got {url.scheme}://"
+            )
+        if not url.host:
+            raise ValueError("Gateway URL must have a valid host")
+        return url

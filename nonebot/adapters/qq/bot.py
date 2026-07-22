@@ -30,6 +30,7 @@ from .event import (
     FriendAddEvent,
     GroupAddRobotEvent,
     GroupAtMessageCreateEvent,
+    GroupMemberAddEvent,
     GroupMessageCreateEvent,
     GuildMessageEvent,
     InteractionCreateEvent,
@@ -131,6 +132,12 @@ async def _check_reply(
     else:
         if not event.msg_elements:
             return
+        # Only handle if the first element is actually a reply/quote segment
+        if (
+            not hasattr(event.msg_elements[0], "type")
+            or event.msg_elements[0].type != "reply"
+        ):
+            return
         event.reply = event.msg_elements[0]
         if (
             event.reply.author
@@ -154,6 +161,8 @@ def _check_at_me(
             message[0].data["text"] = message[0].data["text"].lstrip("\xa0").lstrip()
             if not message[0].data["text"]:
                 del message[0]
+        if not message:
+            message.append(MessageSegment.text(""))
         return
     if (
         isinstance(event, GuildMessageEvent)
@@ -657,6 +666,12 @@ class Bot(BaseBot):
         elif isinstance(event, FriendAddEvent):
             return await self.send_to_c2c(
                 openid=event.get_user_id(), message=message, event_id=event.event_id
+            )
+        elif isinstance(event, GroupMemberAddEvent):
+            return await self.send_to_group(
+                group_openid=event.group_openid,
+                message=message,
+                event_id=event.event_id,
             )
 
         raise RuntimeError("Event cannot be replied to!")
